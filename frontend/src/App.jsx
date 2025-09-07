@@ -1,278 +1,159 @@
-// frontend/src/App.jsx
-import React, { useState, useRef, useEffect } from 'react';
-import './App.css';
-
-const Message = ({ message, isUser, mcpsUsed, timestamp }) => (
-  <div className={`message ${isUser ? 'user-message' : 'bot-message'}`}>
-    <div className="message-content">
-      <div className="message-text">{message}</div>
-      {!isUser && mcpsUsed && mcpsUsed.length > 0 && (
-        <div className="mcps-used">
-          <span className="mcps-label">Sources:</span>
-          {mcpsUsed.map(mcp => (
-            <span key={mcp} className={`mcp-badge ${mcp}`}>
-              {mcp.toUpperCase()}
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
-    <div className="message-timestamp">{timestamp}</div>
-  </div>
-);
-
-const TypingIndicator = () => (
-  <div className="message bot-message">
-    <div className="message-content">
-      <div className="typing-indicator">
-        <span></span>
-        <span></span>
-        <span></span>
-      </div>
-    </div>
-  </div>
-);
-
-const MCPSelector = ({ availableMcps, selectedMcps, onToggle, suggestedMcps }) => (
-  <div className="mcp-selector">
-    <div className="mcp-header">
-      <span>Choose Systems:</span>
-      <button 
-        className="auto-select-btn"
-        onClick={() => suggestedMcps.forEach(onToggle)}
-        disabled={suggestedMcps.length === 0}
-      >
-        Auto-select ({suggestedMcps.length})
-      </button>
-    </div>
-    <div className="mcp-options">
-      {availableMcps.map(mcp => (
-        <button
-          key={mcp.id}
-          className={`mcp-option ${selectedMcps.includes(mcp.id) ? 'selected' : ''} ${suggestedMcps.includes(mcp.id) ? 'suggested' : ''}`}
-          onClick={() => onToggle(mcp.id)}
-          title={mcp.description}
-        >
-          {mcp.name}
-          {suggestedMcps.includes(mcp.id) && <span className="suggested-indicator">*</span>}
-        </button>
-      ))}
-    </div>
-    <div className="mcp-info">
-      {selectedMcps.length === 0 ? (
-        <span>Using smart routing</span>
-      ) : (
-        <span>Selected: {selectedMcps.join(', ')}</span>
-      )}
-    </div>
-  </div>
-);
+import React, { useState, useEffect } from 'react';
+import Sidebar from './components/Sidebar';
+import Header from './components/Header';
+import ChatArea from './components/ChatArea';
+import InputArea from './components/InputArea';
+import WelcomeScreen from './components/WelcomeScreen';
+import './styles/App.css';
 
 const App = () => {
-  const [messages, setMessages] = useState([
-    {
-      id: 1,
-      text: "Hi! I'm your Enterprise Integration Assistant. I can help you search across JIRA, Confluence, and Bitbucket. What would you like to know?",
-      isUser: false,
-      timestamp: new Date().toLocaleTimeString(),
-      mcpsUsed: []
-    }
-  ]);
-  const [inputValue, setInputValue] = useState('');
+  const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [availableMcps, setAvailableMcps] = useState([]);
-  const [selectedMcps, setSelectedMcps] = useState([]);
-  const [suggestedMcps, setSuggestedMcps] = useState([]);
-  const [showMcpSelector, setShowMcpSelector] = useState(false);
-  
-  const messagesEndRef = useRef(null);
-  const inputRef = useRef(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [lastUsedSystems, setLastUsedSystems] = useState([]);
 
-  useEffect(() => {
-    fetchAvailableMcps();
-  }, []);
+  const availableSystems = [
+    { id: 'jira', name: 'Jira', icon: 'J', color: '#0052cc', description: 'Issues & Projects' },
+    { id: 'confluence', name: 'Confluence', icon: 'C', color: '#0066cc', description: 'Documentation' },
+    { id: 'bitbucket', name: 'Bitbucket', icon: 'B', color: '#2684ff', description: 'Repositories' }
+  ];
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  const toggleSidebar = () => {
+    setSidebarCollapsed(!sidebarCollapsed);
   };
 
-  const fetchAvailableMcps = async () => {
-    try {
-      const response = await fetch('/api/mcps');
-      const data = await response.json();
-      setAvailableMcps(data.mcps);
-    } catch (error) {
-      console.error('Failed to fetch MCPs:', error);
-    }
+  const startNewChat = () => {
+    setMessages([]);
+    setLastUsedSystems([]);
   };
 
-  const toggleMcp = (mcpId) => {
-    setSelectedMcps(prev => 
-      prev.includes(mcpId) 
-        ? prev.filter(id => id !== mcpId)
-        : [...prev, mcpId]
-    );
-  };
-
-  const sendMessage = async () => {
-    if (!inputValue.trim() || isLoading) return;
+  const sendMessage = async (messageText) => {
+    if (!messageText.trim() || isLoading) return;
 
     const userMessage = {
       id: Date.now(),
-      text: inputValue,
+      text: messageText,
       isUser: true,
-      timestamp: new Date().toLocaleTimeString()
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      mcpsUsed: []
     };
 
     setMessages(prev => [...prev, userMessage]);
-    setInputValue('');
     setIsLoading(true);
 
     try {
+      // Let the backend automatically determine which MCPs to use
       const response = await fetch('/api/query', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          query: inputValue,
-          selected_mcps: selectedMcps.length > 0 ? selectedMcps : undefined
+          query: messageText,
+          // Don't send selected_mcps - let backend decide automatically
         }),
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
       }
 
       const data = await response.json();
-      
-      // Update suggested MCPs for next query
-      setSuggestedMcps(data.suggested_mcps || []);
 
-      const botMessage = {
+      // Update the systems that were used for this query
+      if (data.mcps_used && data.mcps_used.length > 0) {
+        setLastUsedSystems(data.mcps_used);
+      }
+
+      const assistantMessage = {
         id: Date.now() + 1,
-        text: data.synthesis,
+        text: data.synthesis || "I'm here to help! However, I couldn't process that request right now.",
         isUser: false,
-        timestamp: new Date().toLocaleTimeString(),
-        mcpsUsed: data.mcps_used
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        mcpsUsed: data.mcps_used || []
       };
 
-      setMessages(prev => [...prev, botMessage]);
-
+      setMessages(prev => [...prev, assistantMessage]);
+      
+      // Log suggested MCPs for debugging
+      if (data.suggested_mcps) {
+        console.log('Backend suggested MCPs:', data.suggested_mcps);
+      }
+      
     } catch (error) {
+      console.error('Error sending message:', error);
+      
       const errorMessage = {
         id: Date.now() + 1,
-        text: `Sorry, I encountered an error: ${error.message}`,
+        text: `I apologize, but I'm having trouble connecting right now. Error: ${error.message}`,
         isUser: false,
-        timestamp: new Date().toLocaleTimeString(),
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         mcpsUsed: []
       };
+
       setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
-      inputRef.current?.focus();
     }
   };
 
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
+  const sendExampleMessage = (text) => {
+    sendMessage(text);
   };
 
-  const clearChat = () => {
-    setMessages([
-      {
-        id: 1,
-        text: "Chat cleared. How can I help you?",
-        isUser: false,
-        timestamp: new Date().toLocaleTimeString(),
-        mcpsUsed: []
+  // Test backend connection on component mount
+  useEffect(() => {
+    const testConnection = async () => {
+      try {
+        const response = await fetch('/api/health');
+        if (response.ok) {
+          console.log('✅ Backend connection successful');
+        } else {
+          console.warn('⚠️ Backend health check failed:', response.status);
+        }
+      } catch (error) {
+        console.error('❌ Backend connection failed:', error);
       }
-    ]);
-  };
+    };
+
+    testConnection();
+  }, []);
 
   return (
     <div className="app">
-      <header className="app-header">
-        <div className="header-content">
-          <h1>Enterprise Assistant</h1>
-          <div className="header-controls">
-            <button 
-              className={`toggle-mcp-btn ${showMcpSelector ? 'active' : ''}`}
-              onClick={() => setShowMcpSelector(!showMcpSelector)}
-            >
-              Systems
-            </button>
-            <button className="clear-btn" onClick={clearChat}>
-              Clear
-            </button>
-          </div>
-        </div>
+      <Sidebar 
+        collapsed={sidebarCollapsed}
+        onToggle={toggleSidebar}
+        onNewChat={startNewChat}
+        systems={availableSystems}
+        lastUsedSystems={lastUsedSystems}
+      />
+      
+      <div className={`main-content ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+        <Header 
+          onToggleSidebar={toggleSidebar}
+          sidebarCollapsed={sidebarCollapsed}
+        />
         
-        {showMcpSelector && (
-          <MCPSelector
-            availableMcps={availableMcps}
-            selectedMcps={selectedMcps}
-            onToggle={toggleMcp}
-            suggestedMcps={suggestedMcps}
-          />
-        )}
-      </header>
-
-      <main className="chat-container">
-        <div className="messages">
-          {messages.map(message => (
-            <Message
-              key={message.id}
-              message={message.text}
-              isUser={message.isUser}
-              mcpsUsed={message.mcpsUsed}
-              timestamp={message.timestamp}
+        <div className="chat-container">
+          {messages.length === 0 ? (
+            <WelcomeScreen onSendExample={sendExampleMessage} />
+          ) : (
+            <ChatArea 
+              messages={messages} 
+              isLoading={isLoading}
             />
-          ))}
-          {isLoading && <TypingIndicator />}
-          <div ref={messagesEndRef} />
-        </div>
-
-        <div className="input-container">
-          <div className="input-wrapper">
-            <textarea
-              ref={inputRef}
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={handleKeyPress}
-              placeholder="Ask me about issues, documentation, or repositories..."
-              className="message-input"
-              rows={1}
-              disabled={isLoading}
-            />
-            <button
-              onClick={sendMessage}
-              disabled={!inputValue.trim() || isLoading}
-              className="send-button"
-            >
-              {isLoading ? '...' : 'Send'}
-            </button>
-          </div>
-          
-          {suggestedMcps.length > 0 && (
-            <div className="quick-suggestions">
-              <span>Suggested for your query:</span>
-              {suggestedMcps.map(mcp => (
-                <span key={mcp} className={`suggestion-badge ${mcp}`}>
-                  {mcp.toUpperCase()}
-                </span>
-              ))}
-            </div>
           )}
+          
+          <InputArea 
+            onSendMessage={sendMessage}
+            isLoading={isLoading}
+            onSendExample={sendExampleMessage}
+            lastUsedSystems={lastUsedSystems}
+          />
         </div>
-      </main>
+      </div>
     </div>
   );
 };

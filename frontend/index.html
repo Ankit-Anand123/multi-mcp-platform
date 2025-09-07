@@ -3,10 +3,80 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Multi-MCP Enterprise Integration</title>
+    <meta name="description" content="Multi-MCP Enterprise Integration Platform" />
+    <meta name="theme-color" content="#0f0f23" />
+    <title>Enterprise Assistant - Multi-MCP Integration</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <style>
+      /* Loading screen styles */
+      #loading-screen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: #0f0f23;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        transition: opacity 0.3s ease;
+      }
+
+      #loading-screen.fade-out {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .loading-spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid #363739;
+        border-top: 3px solid #10a37f;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+
+      .loading-text {
+        margin-top: 16px;
+        color: #a1a1aa;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 14px;
+      }
+    </style>
   </head>
   <body>
+    <!-- Loading Screen -->
+    <div id="loading-screen">
+      <div style="text-align: center;">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading Enterprise Assistant...</div>
+      </div>
+    </div>
+
+    <!-- Main App Container -->
     <div id="root"></div>
+
+    <script>
+      // Hide loading screen when app loads
+      window.addEventListener('load', () => {
+        setTimeout(() => {
+          const loadingScreen = document.getElementById('loading-screen');
+          if (loadingScreen) {
+            loadingScreen.classList.add('fade-out');
+            setTimeout(() => {
+              loadingScreen.remove();
+            }, 300);
+          }
+        }, 500);
+      });
+    </script>
+
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

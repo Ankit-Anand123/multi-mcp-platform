@@ -9,8 +9,23 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: 'http://localhost:8000',
-        changeOrigin: true
+        changeOrigin: true,
+        secure: false
       }
     }
+  },
+  build: {
+    outDir: 'dist',
+    sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom']
+        }
+      }
+    }
+  },
+  optimizeDeps: {
+    include: ['react', 'react-dom']
   }
 })
