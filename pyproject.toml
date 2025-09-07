@@ -1,0 +1,19 @@
+[project]
+name = "multi-mcp-platform"
+version = "0.1.0"
+description = "Multi-MCP Enterprise Integration Platform"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic",
+    "python-dotenv", 
+    "requests",
+    "agno",
+    "mcp",
+    "python-multipart",
+    "openai"
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
