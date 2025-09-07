@@ -480,12 +480,12 @@ html, body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  max-width: 800px;
-  margin: 0 auto;
-  width: 100%;
-  padding: 0 32px;
+  width: 100%; /* Changed from max-width: 800px */
+  margin: 0; /* Removed auto centering */
+  padding: 0; /* Removed horizontal padding */
   overflow: hidden;
   min-height: 0;
+  height: 100%; /* Ensure full height usage */
 }
 
 /* Messages Area */
@@ -659,11 +659,16 @@ html, body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start; /* Changed from center to flex-start */
   text-align: center;
   padding: 20px;
-  overflow: hidden;
+  overflow-y: auto; /* CRITICAL: Enable vertical scrolling */
+  overflow-x: hidden;
   min-height: 0;
+  max-height: 100%; /* Ensure it doesn't exceed container height */
+  /* Add custom scrollbar styling */
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
 }
 
 .welcome-content {
@@ -672,9 +677,31 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  height: 100%;
-  justify-content: center;
+  min-height: fit-content; /* Changed from height: 100% */
+  justify-content: flex-start; /* Changed from center */
+  padding-bottom: 40px; /* Add bottom padding for better scrolling */
 }
+
+/* Enhanced scrollbar styling for welcome screen */
+.welcome-screen::-webkit-scrollbar {
+  width: 8px; /* Made slightly wider for better visibility */
+}
+
+.welcome-screen::-webkit-scrollbar-track {
+  background: rgba(241, 245, 249, 0.3);
+  border-radius: 4px;
+}
+
+.welcome-screen::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #cbd5e1 0%, #94a3b8 100%);
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+.welcome-screen::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #94a3b8 0%, #64748b 100%);
+}
+
 
 .welcome-title {
   font-size: 36px;
@@ -857,14 +884,29 @@ html, body {
   bottom: 0;
   background: #f8fafc;
   border-top: 1px solid #e2e8f0;
-  padding: 20px 32px 32px 32px;
+  padding: 20px; /* Reduced padding for full width usage */
   z-index: 40;
   margin-top: auto;
+  width: 100%; /* Ensure full width */
 }
 
+/* Remove the max-width constraint from input area children */
 .input-area > * {
-  max-width: 800px;
-  margin: 0 auto;
+  max-width: none; /* Changed from 800px to none */
+  margin: 0;
+  width: 100%; /* Ensure full width usage */
+}
+
+/* Input container adjustments for full width */
+.input-container {
+  position: relative;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+  width: 100%; /* Ensure full width */
 }
 
 /* Suggestions */
@@ -884,8 +926,9 @@ html, body {
 
 .suggestions-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); /* Adjusted for better full-width distribution */
   gap: 12px;
+  width: 100%;
 }
 
 .suggestion-chip {
@@ -1637,6 +1680,108 @@ html, body {
   border-radius: 8px;
   font-size: 14px;
   margin: 8px 0;
+}
+
+/* Tablet adjustments */
+@media (max-width: 768px) {
+  .chat-container {
+    padding: 0 16px; /* Add back some padding on mobile */
+  }
+  
+  .input-area {
+    padding: 16px;
+  }
+  
+  .welcome-screen {
+    padding: 16px;
+  }
+  
+  .suggestions-grid {
+    grid-template-columns: 1fr; /* Single column on mobile */
+  }
+}
+
+/* Small mobile adjustments */
+@media (max-width: 480px) {
+  .chat-container {
+    padding: 0 12px;
+  }
+  
+  .input-area {
+    padding: 12px;
+  }
+  
+  .welcome-screen {
+    padding: 12px;
+  }
+}
+
+/* ==========================================
+   ENHANCED VISUAL INDICATORS
+   ========================================== */
+
+/* Add a subtle border to indicate the scrollable area */
+.welcome-screen {
+  border: 2px solid #fecaca; /* Red border to show the "red area" */
+  border-radius: 16px;
+  margin: 8px;
+}
+
+/* Add a subtle border to indicate the full-width area */
+.input-area {
+  border: 2px solid #bbf7d0; /* Green border to show the "green area" */
+  border-radius: 16px;
+  margin: 8px;
+}
+
+/* Optional: Remove borders after testing */
+/*
+.welcome-screen {
+  border: none;
+  margin: 0;
+}
+
+.input-area {
+  border-top: 1px solid #e2e8f0;
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
+  border-radius: 0;
+  margin: 0;
+}
+*/
+
+/* ==========================================
+   ADDITIONAL LAYOUT IMPROVEMENTS
+   ========================================== */
+
+/* Ensure messages area is also properly handled if present */
+.messages {
+  flex: 1;
+  padding: 32px 20px; /* Adjusted padding for full width */
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+
+/* Ensure main content uses full available space */
+.main-content {
+  margin-left: 280px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  transition: margin-left 0.3s ease;
+  background: #f8fafc;
+  overflow: hidden;
+  width: calc(100% - 280px); /* Ensure it uses remaining width */
+}
+
+.main-content.sidebar-collapsed {
+  margin-left: 0;
+  width: 100%;
 }
 
 /* ==========================================
