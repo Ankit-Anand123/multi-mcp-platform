@@ -46,62 +46,63 @@ const App = () => {
   };
 
   const sendMessage = async (text) => {
-    if (!text.trim()) return;
+  if (!text.trim()) return;
 
-    const userMessage = {
-      text,
-      isUser: true,
+  const userMessage = {
+    text,
+    isUser: true,
+    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    mcpsUsed: []
+  };
+
+  setMessages(prev => [...prev, userMessage]);
+  setIsLoading(true);
+
+  try {
+    const response = await fetch('/api/query', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      // FIX: Change 'message' to 'query' to match backend expectation
+      body: JSON.stringify({ query: text }), // Changed from 'message' to 'query'
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    const assistantMessage = {
+      text: data.synthesis || data.response, // Use synthesis if available
+      isUser: false,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      mcpsUsed: data.mcps_used || []
+    };
+
+    setMessages(prev => [...prev, assistantMessage]);
+    
+    // Update last used systems for context
+    if (data.mcps_used && data.mcps_used.length > 0) {
+      setLastUsedSystems(data.mcps_used);
+    }
+
+  } catch (error) {
+    console.error('Error sending message:', error);
+    
+    const errorMessage = {
+      text: `Sorry, I encountered an error: ${error.message}`,
+      isUser: false,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       mcpsUsed: []
     };
 
-    setMessages(prev => [...prev, userMessage]);
-    setIsLoading(true);
-
-    try {
-      const response = await fetch('/api/query', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ message: text }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      
-      const assistantMessage = {
-        text: data.response,
-        isUser: false,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        mcpsUsed: data.mcps_used || []
-      };
-
-      setMessages(prev => [...prev, assistantMessage]);
-      
-      // Update last used systems for context
-      if (data.mcps_used && data.mcps_used.length > 0) {
-        setLastUsedSystems(data.mcps_used);
-      }
-
-    } catch (error) {
-      console.error('Error sending message:', error);
-      
-      const errorMessage = {
-        text: `Sorry, I encountered an error: ${error.message}`,
-        isUser: false,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        mcpsUsed: []
-      };
-
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    setMessages(prev => [...prev, errorMessage]);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const sendExampleMessage = (text) => {
     sendMessage(text);

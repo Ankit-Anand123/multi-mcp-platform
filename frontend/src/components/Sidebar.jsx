@@ -24,44 +24,46 @@ const Sidebar = ({
           Automatically selected based on your queries
         </div>
         
-        {systems.map(system => {
-          const isRecentlyUsed = lastUsedSystems.includes(system.id);
-          const isActive = isRecentlyUsed;
-          
-          return (
-            <div 
-              key={system.id}
-              className={`system-item ${isActive ? 'active' : ''} ${isRecentlyUsed ? 'recently-used' : ''}`}
-            >
-              <div className="system-info">
-                <div 
-                  className={`system-icon ${system.id}`}
-                  style={{ backgroundColor: system.color }}
-                >
-                  {system.icon}
+        <div className="systems-list">
+          {systems.map(system => {
+            const isRecentlyUsed = lastUsedSystems.includes(system.id);
+            const isActive = isRecentlyUsed;
+            
+            return (
+              <div 
+                key={system.id}
+                className={`system-item ${isActive ? 'active' : ''} ${isRecentlyUsed ? 'recently-used' : ''}`}
+              >
+                <div className="system-info">
+                  <div 
+                    className={`system-icon ${system.id}`}
+                    style={{ backgroundColor: system.color }}
+                  >
+                    {system.icon}
+                  </div>
+                  <div className="system-details">
+                    <div className="system-name">{system.name}</div>
+                    <div className="system-description">{system.description}</div>
+                  </div>
                 </div>
-                <div className="system-details">
-                  <div className="system-name">{system.name}</div>
-                  <div className="system-description">{system.description}</div>
+                
+                <div className="system-status">
+                  {isRecentlyUsed ? (
+                    <div className="status-badge active">
+                      <div className="status-dot"></div>
+                      <span>Used</span>
+                    </div>
+                  ) : (
+                    <div className="status-badge available">
+                      <div className="status-dot"></div>
+                      <span>Ready</span>
+                    </div>
+                  )}
                 </div>
               </div>
-              
-              <div className="system-status">
-                {isRecentlyUsed ? (
-                  <div className="status-badge active">
-                    <div className="status-dot"></div>
-                    <span>Used</span>
-                  </div>
-                ) : (
-                  <div className="status-badge available">
-                    <div className="status-dot"></div>
-                    <span>Ready</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
       <div className="ai-insights">
@@ -78,7 +80,7 @@ const Sidebar = ({
 
       <div className="sidebar-footer">
         <div className="connection-status">
-          <div className="status-indicator online" />
+          <div className="status-indicator" />
           <span>All systems connected</span>
         </div>
       </div>
