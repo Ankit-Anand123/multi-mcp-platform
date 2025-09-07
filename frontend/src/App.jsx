@@ -2,9 +2,8 @@ import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import ChatArea from './components/ChatArea';
-import InputArea from './components/InputArea';
 import WelcomeScreen from './components/WelcomeScreen';
-import './styles/App.css';
+import InputArea from './components/InputArea';
 
 const App = () => {
   const [messages, setMessages] = useState([]);
@@ -12,10 +11,29 @@ const App = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [lastUsedSystems, setLastUsedSystems] = useState([]);
 
+  // Available systems for the sidebar
   const availableSystems = [
-    { id: 'jira', name: 'Jira', icon: 'J', color: '#0052cc', description: 'Issues & Projects' },
-    { id: 'confluence', name: 'Confluence', icon: 'C', color: '#0066cc', description: 'Documentation' },
-    { id: 'bitbucket', name: 'Bitbucket', icon: 'B', color: '#2684ff', description: 'Repositories' }
+    {
+      id: 'jira',
+      name: 'Jira',
+      description: 'Issue tracking and project management',
+      icon: '🎫',
+      status: 'connected'
+    },
+    {
+      id: 'confluence',
+      name: 'Confluence',
+      description: 'Documentation and knowledge base',
+      icon: '📚',
+      status: 'connected'
+    },
+    {
+      id: 'bitbucket',
+      name: 'Bitbucket',
+      description: 'Code repositories and pull requests',
+      icon: '🔧',
+      status: 'connected'
+    }
   ];
 
   const toggleSidebar = () => {
@@ -27,12 +45,11 @@ const App = () => {
     setLastUsedSystems([]);
   };
 
-  const sendMessage = async (messageText) => {
-    if (!messageText.trim() || isLoading) return;
+  const sendMessage = async (text) => {
+    if (!text.trim()) return;
 
     const userMessage = {
-      id: Date.now(),
-      text: messageText,
+      text,
       isUser: true,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       mcpsUsed: []
@@ -42,33 +59,22 @@ const App = () => {
     setIsLoading(true);
 
     try {
-      // Let the backend automatically determine which MCPs to use
       const response = await fetch('/api/query', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          query: messageText,
-          // Don't send selected_mcps - let backend decide automatically
-        }),
+        body: JSON.stringify({ message: text }),
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
-
-      // Update the systems that were used for this query
-      if (data.mcps_used && data.mcps_used.length > 0) {
-        setLastUsedSystems(data.mcps_used);
-      }
-
+      
       const assistantMessage = {
-        id: Date.now() + 1,
-        text: data.synthesis || "I'm here to help! However, I couldn't process that request right now.",
+        text: data.response,
         isUser: false,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         mcpsUsed: data.mcps_used || []
@@ -76,17 +82,16 @@ const App = () => {
 
       setMessages(prev => [...prev, assistantMessage]);
       
-      // Log suggested MCPs for debugging
-      if (data.suggested_mcps) {
-        console.log('Backend suggested MCPs:', data.suggested_mcps);
+      // Update last used systems for context
+      if (data.mcps_used && data.mcps_used.length > 0) {
+        setLastUsedSystems(data.mcps_used);
       }
-      
+
     } catch (error) {
       console.error('Error sending message:', error);
       
       const errorMessage = {
-        id: Date.now() + 1,
-        text: `I apologize, but I'm having trouble connecting right now. Error: ${error.message}`,
+        text: `Sorry, I encountered an error: ${error.message}`,
         isUser: false,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         mcpsUsed: []
@@ -120,6 +125,9 @@ const App = () => {
     testConnection();
   }, []);
 
+  // Check if conversation has started
+  const hasMessages = messages.length > 0;
+
   return (
     <div className="app">
       <Sidebar 
@@ -137,7 +145,7 @@ const App = () => {
         />
         
         <div className="chat-container">
-          {messages.length === 0 ? (
+          {!hasMessages ? (
             <WelcomeScreen onSendExample={sendExampleMessage} />
           ) : (
             <ChatArea 
@@ -145,14 +153,15 @@ const App = () => {
               isLoading={isLoading}
             />
           )}
-          
-          <InputArea 
-            onSendMessage={sendMessage}
-            isLoading={isLoading}
-            onSendExample={sendExampleMessage}
-            lastUsedSystems={lastUsedSystems}
-          />
         </div>
+        
+        <InputArea 
+          onSendMessage={sendMessage}
+          isLoading={isLoading}
+          onSendExample={sendExampleMessage}
+          lastUsedSystems={lastUsedSystems}
+          hasMessages={hasMessages} // Pass this to hide suggestions after first message
+        />
       </div>
     </div>
   );

@@ -1,48 +1,28 @@
 import React from 'react';
 
 const WelcomeScreen = ({ onSendExample }) => {
+  // Reduced to only 3 key examples instead of 6
   const examples = [
     {
-      title: '🎫 Issue Tracking',
-      description: 'I\'ll automatically check Jira for tickets and project status',
+      title: '🎫 Issue Management',
+      description: 'Get tickets, project status, and sprint insights',
       prompt: 'Show me my high priority tickets for this sprint',
       systems: ['Jira'],
       gradient: 'from-blue-500 to-blue-600'
     },
     {
-      title: '📚 Knowledge Search',
-      description: 'I\'ll search Confluence for documentation and guides',
+      title: '📚 Documentation',
+      description: 'Search knowledge base and technical docs',
       prompt: 'Find documentation about our authentication process',
       systems: ['Confluence'],
       gradient: 'from-purple-500 to-purple-600'
     },
     {
-      title: '🔧 Code Analysis',
-      description: 'I\'ll examine Bitbucket for repository insights and PRs',
+      title: '🔧 Code & Reviews',
+      description: 'Analyze repositories and pull requests',
       prompt: 'What pull requests need my review?',
       systems: ['Bitbucket'],
       gradient: 'from-green-500 to-green-600'
-    },
-    {
-      title: '🔄 Cross-System Insights',
-      description: 'I\'ll connect data across multiple systems for deeper analysis',
-      prompt: 'Find issues related to the user authentication feature and any related documentation',
-      systems: ['Jira', 'Confluence', 'Bitbucket'],
-      gradient: 'from-orange-500 to-pink-500'
-    },
-    {
-      title: '📊 Project Overview',
-      description: 'I\'ll gather comprehensive project status from all systems',
-      prompt: 'Give me a complete overview of the mobile app project',
-      systems: ['Jira', 'Confluence', 'Bitbucket'],
-      gradient: 'from-indigo-500 to-blue-500'
-    },
-    {
-      title: '🚀 Release Planning',
-      description: 'I\'ll help plan releases by analyzing issues, docs, and code',
-      prompt: 'What\'s ready for our next release and what might be missing?',
-      systems: ['Jira', 'Confluence', 'Bitbucket'],
-      gradient: 'from-red-500 to-orange-500'
     }
   ];
 
@@ -51,22 +31,21 @@ const WelcomeScreen = ({ onSendExample }) => {
       <div className="welcome-content">
         <h2 className="welcome-title">How can I help you today?</h2>
         <p className="welcome-subtitle">
-          I automatically connect to the right systems based on your questions. 
-          No need to select anything - just ask!
+          I automatically connect to Jira, Confluence, and Bitbucket based on your questions. Just ask naturally!
         </p>
         
         <div className="ai-features">
           <div className="feature-badge">
             <span className="feature-icon">🧠</span>
-            <span>AI-Powered System Selection</span>
+            <span>Smart System Selection</span>
           </div>
           <div className="feature-badge">
             <span className="feature-icon">🔗</span>
-            <span>Cross-System Intelligence</span>
+            <span>Cross-Platform Insights</span>
           </div>
           <div className="feature-badge">
             <span className="feature-icon">⚡</span>
-            <span>Instant Insights</span>
+            <span>Instant Results</span>
           </div>
         </div>
         
@@ -97,9 +76,7 @@ const WelcomeScreen = ({ onSendExample }) => {
           <div className="intelligence-note">
             <div className="note-icon">🎯</div>
             <div className="note-content">
-              <strong>Smart System Selection:</strong> I analyze your question and automatically 
-              choose the best combination of Jira, Confluence, and Bitbucket to give you 
-              comprehensive answers. Just ask naturally!
+              <strong>Smart Integration:</strong> I analyze your questions and automatically choose the right systems to give you comprehensive answers.
             </div>
           </div>
         </div>

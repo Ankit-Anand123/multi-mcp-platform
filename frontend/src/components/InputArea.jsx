@@ -1,6 +1,12 @@
 import React, { useState, useRef } from 'react';
 
-const InputArea = ({ onSendMessage, isLoading, onSendExample, lastUsedSystems = [] }) => {
+const InputArea = ({ 
+  onSendMessage, 
+  isLoading, 
+  onSendExample, 
+  lastUsedSystems = [], 
+  hasMessages = false // NEW: Track if conversation has started
+}) => {
   const [inputValue, setInputValue] = useState('');
   const textareaRef = useRef(null);
 
@@ -66,8 +72,8 @@ const InputArea = ({ onSendMessage, isLoading, onSendExample, lastUsedSystems = 
 
   return (
     <div className="input-area">
-      {/* Context Indicator - Above Input */}
-      {lastUsedSystems.length > 0 && (
+      {/* Context Indicator - Only show if we have context and no messages yet */}
+      {lastUsedSystems.length > 0 && !hasMessages && (
         <div className="context-indicator">
           <span className="context-text">
             🎯 Recently used: {lastUsedSystems.map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(', ')}
@@ -75,11 +81,11 @@ const InputArea = ({ onSendMessage, isLoading, onSendExample, lastUsedSystems = 
         </div>
       )}
       
-      {/* Suggestions - Above Input */}
-      {!isLoading && (
+      {/* Suggestions - ONLY show before first message */}
+      {!hasMessages && !isLoading && (
         <div className="suggestions">
           <div className="suggestions-header">
-            💡 Smart suggestions:
+            💡 Quick start suggestions:
           </div>
           <div className="suggestions-grid">
             {suggestions.map((suggestion, index) => (
