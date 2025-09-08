@@ -1,15 +1,20 @@
 import React from 'react';
+import ReactMarkdown from 'react-markdown';
 
-const Message = ({ message, isUser, mcpsUsed = [], timestamp }) => {
+const Message = ({ message, isUser, mcpsUsed = [], timestamp, isInContext = false }) => {
   return (
-    <div className={`message ${isUser ? 'user' : 'assistant'}`}>
+    <div className={`message ${isUser ? 'user' : 'assistant'} ${isInContext ? 'in-context' : ''}`}>
       <div className={`avatar ${isUser ? 'user' : 'assistant'}`}>
         {isUser ? 'U' : 'A'}
       </div>
       
       <div className="message-content">
         <div className="message-text">
-          {message}
+          {isUser ? (
+            message
+          ) : (
+            <ReactMarkdown>{message}</ReactMarkdown>
+          )}
         </div>
         
         <div className="message-meta">
@@ -23,6 +28,9 @@ const Message = ({ message, isUser, mcpsUsed = [], timestamp }) => {
             </div>
           )}
           <span className="timestamp">{timestamp}</span>
+          {isInContext && (
+            <span className="context-indicator-small">📝 Context</span>
+          )}
         </div>
       </div>
     </div>

@@ -5,7 +5,8 @@ const InputArea = ({
   isLoading, 
   onSendExample, 
   lastUsedSystems = [], 
-  hasMessages = false // NEW: Track if conversation has started
+  hasMessages = false, // NEW: Track if conversation has started
+  messagesLength = 0  // NEW: Track message count for context indicator
 }) => {
   const [inputValue, setInputValue] = useState('');
   const textareaRef = useRef(null);
@@ -72,11 +73,14 @@ const InputArea = ({
 
   return (
     <div className="input-area">
-      {/* Context Indicator - Only show if we have context and no messages yet */}
-      {lastUsedSystems.length > 0 && !hasMessages && (
+      {/* Context Indicator - Show when we have conversation context */}
+      {hasMessages && messagesLength > 0 && (
         <div className="context-indicator">
           <span className="context-text">
-            🎯 Recently used: {lastUsedSystems.map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(', ')}
+            💬 Using conversation context (last {Math.min(messagesLength, 5)} messages)
+            {lastUsedSystems.length > 0 && (
+              <span> • Recently used: {lastUsedSystems.map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(', ')}</span>
+            )}
           </span>
         </div>
       )}

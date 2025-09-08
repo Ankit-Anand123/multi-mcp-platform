@@ -7,8 +7,7 @@ Run:
 
 ENV (.env or process):
   JIRA_URL=https://your-jira-instance.atlassian.net
-  JIRA_USERNAME=your-email@company.com
-  JIRA_TOKEN=your-api-token
+  JIRA_TOKEN=your-bearer-token
   
   # Optional:
   # JIRA_VERIFY_SSL=true
@@ -23,7 +22,6 @@ from typing import Any, Dict, Optional, List
 import json
 
 import requests
-from requests.auth import HTTPBasicAuth
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 
@@ -47,24 +45,21 @@ DEFAULT_TIMEOUT = (5, 30)
 @dataclass
 class JiraConfig:
     base_url: str
-    username: str
     token: str
     verify_ssl: bool
 
 def load_jira_config() -> JiraConfig:
     base_url = (os.getenv("JIRA_URL") or "").strip().rstrip("/")
-    username = (os.getenv("JIRA_USERNAME") or "").strip()
     token = (os.getenv("JIRA_TOKEN") or "").strip()
     verify_ssl = env_bool("JIRA_VERIFY_SSL", True)
 
     if not base_url:
         log.warning("JIRA_URL is not set.")
-    if not username or not token:
-        log.warning("JIRA_USERNAME or JIRA_TOKEN is not set.")
+    if not token:
+        log.warning("JIRA_TOKEN is not set.")
 
     return JiraConfig(
         base_url=base_url,
-        username=username,
         token=token,
         verify_ssl=verify_ssl,
     )
@@ -76,15 +71,20 @@ class JiraClient:
     def __init__(self, cfg: JiraConfig):
         if not cfg.base_url:
             raise ValueError("JIRA_URL is not configured.")
-        if not cfg.username or not cfg.token:
-            raise ValueError("JIRA_USERNAME or JIRA_TOKEN is not configured.")
+        if not cfg.token:
+            raise ValueError("JIRA_TOKEN is not configured.")
         
         self.cfg = cfg
-        self.api_base = f"{cfg.base_url}/rest/api/3"
+        # Extract API base from the provided URL or default to v3
+        if "/rest/api/" in cfg.base_url:
+            self.api_base = cfg.base_url.rstrip("/")
+        else:
+            self.api_base = f"{cfg.base_url}/rest/api/3"
         
         s = requests.Session()
-        s.auth = HTTPBasicAuth(cfg.username, cfg.token)
+        # Set Authorization header with Bearer token (like Confluence)
         s.headers.update({
+            "Authorization": f"Bearer {cfg.token}",
             "Accept": "application/json",
             "Content-Type": "application/json"
         })
@@ -92,33 +92,47 @@ class JiraClient:
         self.sess = s
 
     def _check(self, r: requests.Response) -> Dict[str, Any]:
+        log.info(f"API Response: {r.status_code} for {r.url}")
         if r.status_code >= 400:
             detail: Any
             try:
                 detail = r.json()
+                log.error(f"API Error {r.status_code}: {detail}")
             except Exception:
                 detail = r.text
+                log.error(f"API Error {r.status_code}: {detail}")
             raise RuntimeError(f"JIRA API error {r.status_code}: {detail}")
         try:
-            return r.json()
+            response_data = r.json()
+            log.debug(f"API Success: Received {len(str(response_data))} characters of data")
+            return response_data
         except Exception as e:
+            log.error(f"Failed to parse JSON response: {e}")
             raise RuntimeError(f"Failed to parse JSON: {e}") from e
 
     # ---- Basic operations
     def ping(self) -> Dict[str, Any]:
+        log.info("Executing ping() - health check")
         url = f"{self.api_base}/myself"
+        log.info(f"Ping URL: {url}")
         r = self.sess.get(url, timeout=DEFAULT_TIMEOUT)
-        return {"ok": True, "data": self._check(r)}
+        result = {"ok": True, "data": self._check(r)}
+        log.info("Ping successful")
+        return result
 
     # ---- Projects
     def get_projects(self, expand: Optional[str] = None) -> Dict[str, Any]:
         """Get all projects"""
+        log.info("Executing get_projects()")
         url = f"{self.api_base}/project"
         params = {}
         if expand:
             params["expand"] = expand
+        log.info(f"Projects URL: {url}")
         r = self.sess.get(url, params=params, timeout=DEFAULT_TIMEOUT)
-        return self._check(r)
+        result = self._check(r)
+        log.info(f"Retrieved {len(result) if isinstance(result, list) else 'unknown count'} projects")
+        return result
 
     def get_project(self, project_key: str, expand: Optional[str] = None) -> Dict[str, Any]:
         """Get project by key"""
@@ -132,6 +146,7 @@ class JiraClient:
     # ---- Issues
     def search_issues(self, jql: str, start_at: int = 0, max_results: int = 50, expand: Optional[str] = None, fields: Optional[str] = None) -> Dict[str, Any]:
         """Search issues using JQL"""
+        log.info(f"Executing search_issues() with JQL: {jql}")
         url = f"{self.api_base}/search"
         payload = {
             "jql": jql,
@@ -143,8 +158,12 @@ class JiraClient:
         if fields:
             payload["fields"] = fields.split(",") if isinstance(fields, str) else fields
         
+        log.info(f"Search URL: {url}")
+        log.debug(f"Search payload: {payload}")
         r = self.sess.post(url, json=payload, timeout=DEFAULT_TIMEOUT)
-        return self._check(r)
+        result = self._check(r)
+        log.info(f"Search completed - found {result.get('total', 0)} issues")
+        return result
 
     def get_issue(self, issue_key: str, expand: Optional[str] = None, fields: Optional[str] = None) -> Dict[str, Any]:
         """Get issue by key"""
@@ -278,7 +297,7 @@ class JiraClient:
     def search_users(self, query: str, max_results: int = 50) -> Dict[str, Any]:
         """Search users"""
         url = f"{self.api_base}/user/search"
-        params = {"query": query, "maxResults": max_results}
+        params = {"username": query, "maxResults": max_results}
         r = self.sess.get(url, params=params, timeout=DEFAULT_TIMEOUT)
         return self._check(r)
 
@@ -292,23 +311,50 @@ class JiraClient:
     # ---- Boards and Sprints (Agile)
     def get_boards(self, start_at: int = 0, max_results: int = 50) -> Dict[str, Any]:
         """Get agile boards"""
-        url = f"{self.cfg.base_url}/rest/agile/1.0/board"
-        params = {"startAt": start_at, "maxResults": max_results}
-        r = self.sess.get(url, params=params, timeout=DEFAULT_TIMEOUT)
-        return self._check(r)
+        log.info("Executing get_boards()")
+        try:
+            # Use the base URL without /rest/api/2 for agile endpoints
+            base_without_api = self.cfg.base_url.replace("/rest/api/2", "").replace("/rest/api/3", "")
+            url = f"{base_without_api}/rest/agile/1.0/board"
+            params = {"startAt": start_at, "maxResults": max_results}
+            log.info(f"Boards URL: {url}")
+            log.debug(f"Boards params: {params}")
+            r = self.sess.get(url, params=params, timeout=DEFAULT_TIMEOUT)
+            result = self._check(r)
+            log.info(f"Retrieved {len(result.get('values', []))} boards")
+            return result
+        except RuntimeError as e:
+            log.warning(f"get_boards() failed: {e}")
+            if "404" in str(e):
+                return {"error": "Agile/JIRA Software features may not be enabled on this instance", "boards": []}
+            raise e
 
     def get_sprints(self, board_id: int, state: Optional[str] = None) -> Dict[str, Any]:
         """Get sprints for board"""
-        url = f"{self.cfg.base_url}/rest/agile/1.0/board/{board_id}/sprint"
-        params = {}
-        if state:
-            params["state"] = state
-        r = self.sess.get(url, params=params, timeout=DEFAULT_TIMEOUT)
-        return self._check(r)
+        try:
+            # Use the base URL without /rest/api/2 for agile endpoints
+            base_without_api = self.cfg.base_url.replace("/rest/api/2", "").replace("/rest/api/3", "")
+            url = f"{base_without_api}/rest/agile/1.0/board/{board_id}/sprint"
+            params = {}
+            if state:
+                params["state"] = state
+            r = self.sess.get(url, params=params, timeout=DEFAULT_TIMEOUT)
+            return self._check(r)
+        except RuntimeError as e:
+            error_msg = str(e)
+            if "doesn't support sprints" in error_msg:
+                return {"error": f"Board {board_id} doesn't support sprints (may be a Kanban board)", "sprints": []}
+            elif "does not exist or you do not have permission" in error_msg:
+                return {"error": f"Board {board_id} doesn't exist or you don't have permission to view it", "sprints": []}
+            elif "404" in error_msg:
+                return {"error": "Agile/JIRA Software features may not be enabled on this instance", "sprints": []}
+            raise e
 
     def get_sprint_issues(self, sprint_id: int, start_at: int = 0, max_results: int = 50) -> Dict[str, Any]:
         """Get issues in sprint"""
-        url = f"{self.cfg.base_url}/rest/agile/1.0/sprint/{sprint_id}/issue"
+        # Use the base URL without /rest/api/2 for agile endpoints
+        base_without_api = self.cfg.base_url.replace("/rest/api/2", "").replace("/rest/api/3", "")
+        url = f"{base_without_api}/rest/agile/1.0/sprint/{sprint_id}/issue"
         params = {"startAt": start_at, "maxResults": max_results}
         r = self.sess.get(url, params=params, timeout=DEFAULT_TIMEOUT)
         return self._check(r)
@@ -367,6 +413,31 @@ def get_project(project_key: str, expand: Optional[str] = None) -> dict:
 @mcp.tool()
 def search_issues(jql: str, start_at: int = 0, max_results: int = 50, expand: Optional[str] = None, fields: Optional[str] = None) -> dict:
     """Search issues using JQL. Example: 'project = ABC AND status = Open'"""
+    log.info(f"MCP Tool: search_issues() called with JQL: {jql}")
+    result = get_jira_client().search_issues(jql=jql, start_at=start_at, max_results=max_results, expand=expand, fields=fields)
+    log.info(f"search_issues() completed successfully")
+    return result
+
+@mcp.tool()
+def get_my_assigned_issues(status: Optional[str] = None, start_at: int = 0, max_results: int = 50, expand: Optional[str] = None, fields: Optional[str] = None) -> dict:
+    """Get issues assigned to the current user. status: filter by status like 'Open', 'In Progress', etc."""
+    log.info(f"MCP Tool: get_my_assigned_issues() called with status={status}")
+    jql = "assignee = currentUser()"
+    if status:
+        jql += f" AND status = '{status}'"
+    jql += " ORDER BY updated DESC"
+    log.info(f"Generated JQL: {jql}")
+    result = get_jira_client().search_issues(jql=jql, start_at=start_at, max_results=max_results, expand=expand, fields=fields)
+    log.info(f"get_my_assigned_issues() completed successfully")
+    return result
+
+@mcp.tool()
+def get_user_assigned_issues(user_account_id: str, status: Optional[str] = None, start_at: int = 0, max_results: int = 50, expand: Optional[str] = None, fields: Optional[str] = None) -> dict:
+    """Get issues assigned to a specific user by account ID. status: filter by status like 'Open', 'In Progress', etc."""
+    jql = f"assignee = '{user_account_id}'"
+    if status:
+        jql += f" AND status = '{status}'"
+    jql += " ORDER BY updated DESC"
     return get_jira_client().search_issues(jql=jql, start_at=start_at, max_results=max_results, expand=expand, fields=fields)
 
 @mcp.tool()

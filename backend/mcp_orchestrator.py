@@ -36,10 +36,13 @@ class MCPOrchestrator:
             azure_deployment="gpt-4o-mini",
         )
         
+
+        
         self.mcp_configs = {
             MCPType.JIRA: MCPConfig(
                 mcp_type=MCPType.JIRA,
                 command="python ../mcps/jira_mcp.py",
+                timeout=30,  # Reduced timeout to debug faster
                 instructions="""You are a JIRA operations agent. Use JIRA MCP tools for:
                 - Issue tracking and management
                 - Sprint and project management
@@ -144,10 +147,15 @@ class MCPOrchestrator:
         
         return needed_mcps or {MCPType.CONFLUENCE}  # Default to Confluence
 
-    async def execute_query(self, query: str, selected_mcps: Optional[Set[MCPType]] = None) -> Dict:
-        """Execute query using determined or selected MCPs"""
+    async def execute_query(self, query: str, selected_mcps: Optional[Set[MCPType]] = None, conversation_history: Optional[List[Dict]] = None) -> Dict:
+        """Execute query using determined or selected MCPs with conversation history"""
+        print(f"[ORCHESTRATOR] Starting execute_query with: {query}")
+        
         if selected_mcps is None:
             selected_mcps = self.analyze_query(query)
+            print(f"[ORCHESTRATOR] Auto-selected MCPs: {[mcp.value for mcp in selected_mcps]}")
+        else:
+            print(f"[ORCHESTRATOR] Using provided MCPs: {[mcp.value for mcp in selected_mcps]}")
         
         results = {
             'query': query,
@@ -159,43 +167,57 @@ class MCPOrchestrator:
         if len(selected_mcps) == 1:
             # Single MCP execution
             mcp_type = list(selected_mcps)[0]
+            print(f"[ORCHESTRATOR] Single MCP execution: {mcp_type.value}")
             try:
-                response = await self._execute_single_mcp(query, mcp_type)
+                response = await self._execute_single_mcp(query, mcp_type, conversation_history)
                 results['responses'][mcp_type.value] = response
                 results['synthesis'] = response
+                print(f"[ORCHESTRATOR] Single MCP execution completed successfully")
             except Exception as e:
                 error_msg = f"Error executing {mcp_type.value}: {str(e)}"
+                print(f"[ORCHESTRATOR] Single MCP execution failed: {error_msg}")
                 results['responses'][mcp_type.value] = error_msg
                 results['synthesis'] = error_msg
         else:
             # Multiple MCP execution
+            print(f"[ORCHESTRATOR] Multiple MCP execution: {[mcp.value for mcp in selected_mcps]}")
             responses = {}
             for mcp_type in selected_mcps:
                 try:
-                    response = await self._execute_single_mcp(query, mcp_type)
+                    print(f"[ORCHESTRATOR] Executing MCP: {mcp_type.value}")
+                    response = await self._execute_single_mcp(query, mcp_type, conversation_history)
                     responses[mcp_type.value] = response
+                    print(f"[ORCHESTRATOR] MCP {mcp_type.value} completed successfully")
                 except Exception as e:
-                    responses[mcp_type.value] = f"Error: {str(e)}"
+                    error_msg = f"Error: {str(e)}"
+                    print(f"[ORCHESTRATOR] MCP {mcp_type.value} failed: {error_msg}")
+                    responses[mcp_type.value] = error_msg
             
             results['responses'] = responses
             
             # Synthesize results from multiple MCPs
             if len(responses) > 1:
                 try:
-                    synthesis = await self._synthesize_results(query, responses)
+                    print(f"[ORCHESTRATOR] Starting synthesis of {len(responses)} responses")
+                    synthesis = await self._synthesize_results(query, responses, conversation_history)
                     results['synthesis'] = synthesis
+                    print(f"[ORCHESTRATOR] Synthesis completed successfully")
                 except Exception as e:
-                    results['synthesis'] = f"Synthesis error: {str(e)}"
+                    error_msg = f"Synthesis error: {str(e)}"
+                    print(f"[ORCHESTRATOR] Synthesis failed: {error_msg}")
+                    results['synthesis'] = error_msg
             else:
                 results['synthesis'] = list(responses.values())[0]
         
+        print(f"[ORCHESTRATOR] execute_query completed")
         return results
 
-    async def _execute_single_mcp(self, query: str, mcp_type: MCPType) -> str:
-        """Execute query on a single MCP"""
+    async def _execute_single_mcp(self, query: str, mcp_type: MCPType, conversation_history: Optional[List[Dict]] = None) -> str:
+        """Execute query on a single MCP with conversation context"""
         config = self.mcp_configs[mcp_type]
         
-        print(f"Executing {mcp_type.value} with command: {config.command}")
+        print(f"[ORCHESTRATOR] Executing {mcp_type.value} with command: {config.command}")
+        print(f"[ORCHESTRATOR] Query: {query}")
         
         mcp_tools = MCPTools(
             command=config.command,
@@ -204,19 +226,53 @@ class MCPOrchestrator:
         )
         
         try:
+            print(f"[ORCHESTRATOR] Connecting to {mcp_type.value} MCP...")
             await mcp_tools.connect()
-            print(f"Connected to {mcp_type.value} MCP")
+            print(f"[ORCHESTRATOR] Connected to {mcp_type.value} MCP successfully")
             
+            # Test MCP connection first
+            print(f"[ORCHESTRATOR] Testing {mcp_type.value} MCP connection...")
+            try:
+                # Get available tools to verify connection
+                tools = await mcp_tools.list_tools()
+                print(f"[ORCHESTRATOR] {mcp_type.value} MCP has {len(tools)} tools available")
+                for tool in tools[:3]:  # Show first 3 tools
+                    print(f"[ORCHESTRATOR]   - {tool.name}: {tool.description[:100]}...")
+            except Exception as e:
+                print(f"[ORCHESTRATOR] Warning: Could not list tools from {mcp_type.value}: {e}")
+            
+            # Build context from conversation history
+            context_instructions = config.instructions
+            if conversation_history:
+                context_messages = self._build_context_from_history(conversation_history)
+                context_instructions += f"\n\nConversation Context:\n{context_messages}"
+            
+            print(f"[ORCHESTRATOR] Creating agent for {mcp_type.value}")
             agent = Agent(
                 model=self.model,
                 tools=[mcp_tools],
-                instructions=config.instructions,
+                instructions=context_instructions,
                 markdown=True,
                 show_tool_calls=False,
             )
             
-            # Use arun to get the response as a string
-            response = await agent.arun(query)
+            print(f"[ORCHESTRATOR] Running agent for {mcp_type.value} with query...")
+            print(f"[ORCHESTRATOR] Agent instructions: {context_instructions[:200]}...")
+            
+            # Add timeout to prevent hanging
+            try:
+                # Use arun to get the response as a string with timeout
+                response = await asyncio.wait_for(
+                    agent.arun(query), 
+                    timeout=config.timeout
+                )
+                print(f"[ORCHESTRATOR] {mcp_type.value} agent completed successfully")
+            except asyncio.TimeoutError:
+                print(f"[ORCHESTRATOR] {mcp_type.value} agent timed out after {config.timeout} seconds")
+                raise Exception(f"{mcp_type.value} agent execution timed out")
+            except Exception as e:
+                print(f"[ORCHESTRATOR] Agent execution failed: {str(e)}")
+                raise e
             
             # Handle different response types
             if hasattr(response, 'content'):
@@ -227,37 +283,65 @@ class MCPOrchestrator:
                 return str(response)
             
         except Exception as e:
-            print(f"Error in {mcp_type.value} execution: {str(e)}")
+            print(f"[ORCHESTRATOR] Error in {mcp_type.value} execution: {str(e)}")
+            import traceback
+            traceback.print_exc()
             raise e
         finally:
             try:
+                print(f"[ORCHESTRATOR] Closing {mcp_type.value} tools...")
                 await mcp_tools.close()
+                print(f"[ORCHESTRATOR] {mcp_type.value} tools closed successfully")
             except Exception as e:
-                print(f"Warning: Error closing {mcp_type.value} tools: {e}")
+                print(f"[ORCHESTRATOR] Warning: Error closing {mcp_type.value} tools: {e}")
 
-    async def _synthesize_results(self, query: str, responses: Dict[str, str]) -> str:
-        """Synthesize results from multiple MCPs"""
+    def _build_context_from_history(self, conversation_history: List[Dict]) -> str:
+        """Build context string from conversation history (last 5 messages)"""
+        if not conversation_history:
+            return ""
+        
+        # Take only the last 5 messages for context
+        recent_history = conversation_history[-5:]
+        
+        context_parts = []
+        for msg in recent_history:
+            role = "User" if msg.get('is_user', False) else "Assistant"
+            text = msg.get('text', '')
+            mcps = msg.get('mcps_used', [])
+            
+            context_part = f"{role}: {text}"
+            if mcps and not msg.get('is_user', False):
+                context_part += f" (Used: {', '.join(mcps)})"
+            
+            context_parts.append(context_part)
+        
+        return "\n".join(context_parts)
+
+    async def _synthesize_results(self, query: str, responses: Dict[str, str], conversation_history: Optional[List[Dict]] = None) -> str:
+        """Synthesize results from multiple MCPs with conversation context"""
+        context_instructions = """You are a concise synthesis agent. Combine information from multiple systems 
+        to provide a direct, clean response that answers the user's question without unnecessary elaboration."""
+        
+        if conversation_history:
+            context_messages = self._build_context_from_history(conversation_history)
+            context_instructions += f"\n\nConversation Context:\n{context_messages}"
+        
         synthesis_agent = Agent(
             model=self.model,
             tools=[],
-            instructions="""You are a synthesis agent. Combine information from multiple systems 
-            to provide a comprehensive, coherent response. Identify connections between different 
-            systems and provide actionable insights.""",
+            instructions=context_instructions,
             markdown=True,
             show_tool_calls=False,
         )
         
         synthesis_prompt = f"""
-        Original Query: {query}
+        User Query: {query}
         
-        Results from different systems:
+        System Results:
         {chr(10).join([f"{system.upper()}: {response}" for system, response in responses.items()])}
         
-        Please synthesize these results into a comprehensive response that:
-        1. Addresses the original query completely
-        2. Identifies connections between different systems
-        3. Provides actionable insights
-        4. Highlights any contradictions or gaps
+        Provide a direct, concise answer to the user's query. Focus only on what was asked. 
+        Do not add insights, connections, or suggestions unless specifically requested.
         """
         
         response = await synthesis_agent.arun(synthesis_prompt)
@@ -291,9 +375,16 @@ app.add_middleware(
 # Initialize orchestrator
 orchestrator = MCPOrchestrator()
 
+class MessageHistory(BaseModel):
+    text: str
+    is_user: bool
+    timestamp: str
+    mcps_used: Optional[List[str]] = []
+
 class QueryRequest(BaseModel):
     query: str
     selected_mcps: Optional[List[str]] = None
+    conversation_history: Optional[List[MessageHistory]] = []
 
 class QueryResponse(BaseModel):
     query: str
@@ -304,28 +395,53 @@ class QueryResponse(BaseModel):
 
 @app.post("/api/query", response_model=QueryResponse)
 async def execute_query(request: QueryRequest):
+    print(f"[API] Received query request: {request.query}")
+    print(f"[API] Selected MCPs: {request.selected_mcps}")
+    print(f"[API] Conversation history length: {len(request.conversation_history) if request.conversation_history else 0}")
+    
     try:
         # Convert string MCPs to enum types
         selected_mcps = None
         if request.selected_mcps:
             selected_mcps = {MCPType(mcp) for mcp in request.selected_mcps}
+            print(f"[API] Converted MCPs to enums: {[mcp.value for mcp in selected_mcps]}")
+        
+        # Convert Pydantic models to dict for conversation history
+        conversation_history = None
+        if request.conversation_history:
+            conversation_history = [
+                {
+                    'text': msg.text,
+                    'is_user': msg.is_user,
+                    'timestamp': msg.timestamp,
+                    'mcps_used': msg.mcps_used or []
+                }
+                for msg in request.conversation_history
+            ]
+            print(f"[API] Converted conversation history: {len(conversation_history)} messages")
         
         # Get suggested MCPs for frontend
         suggested_mcps = orchestrator.analyze_query(request.query)
         suggested_mcp_names = [mcp.value for mcp in suggested_mcps]
+        print(f"[API] Suggested MCPs: {suggested_mcp_names}")
         
-        # Execute query
-        results = await orchestrator.execute_query(request.query, selected_mcps)
+        # Execute query with conversation history
+        print(f"[API] Starting orchestrator execution...")
+        results = await orchestrator.execute_query(request.query, selected_mcps, conversation_history)
+        print(f"[API] Orchestrator execution completed successfully")
         
-        return QueryResponse(
+        response = QueryResponse(
             query=results['query'],
             mcps_used=results['mcps_used'],
             responses=results['responses'],
             synthesis=results['synthesis'],
             suggested_mcps=suggested_mcp_names
         )
+        print(f"[API] Returning response with {len(results['responses'])} MCP responses")
+        return response
+        
     except Exception as e:
-        print(f"API error: {str(e)}")
+        print(f"[API] Error occurred: {str(e)}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
